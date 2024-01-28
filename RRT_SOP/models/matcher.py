@@ -1,21 +1,36 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import Tuple
 
 from .position_encoding import PositionEmbeddingSine, PositionEmbeddingLearned
 from .transformer import TransformerEncoder, TransformerEncoderLayer
+import torch
 
 
 class MatchERT(nn.Module):
-    def __init__(self, d_global, d_model, nhead, num_encoder_layers, dim_feedforward, dropout, activation, normalize_before):
+    def __init__(
+        self,
+        num_classes: int,
+        d_global: int,
+        d_model: int,
+        nhead: int,
+        num_encoder_layers: int,
+        dim_feedforward: int,
+        dropout: float,
+        activation: str,
+        normalize_before: bool,
+    ):
         super(MatchERT, self).__init__()
-        assert (d_model % 2 == 0)
-        encoder_layer = TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout, activation, normalize_before)
+        assert d_model % 2 == 0
+        encoder_layer = TransformerEncoderLayer(
+            d_model, nhead, dim_feedforward, dropout, activation, normalize_before
+        )
         encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
         self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
-        self.pos_encoder = PositionEmbeddingSine(d_model//2, normalize=True, scale=2.0)
+        self.pos_encoder = PositionEmbeddingSine(d_model // 2, normalize=True, scale=2.0)
         self.seg_encoder = nn.Embedding(4, d_model)
-        self.classifier = nn.Linear(d_model, 1)
+        self.classifier = nn.Linear(d_model, num_classes)
         self._reset_parameters()
         self.d_model = d_model
         self.nhead = nhead
@@ -24,8 +39,15 @@ class MatchERT(nn.Module):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
-    
-    def forward(self, src_global, src_local, tgt_global, tgt_local, normalize=False):
+
+    def forward(
+        self,
+        src_global: torch.Tensor,
+        src_local: torch.Tensor,
+        tgt_global: torch.Tensor,
+        tgt_local: torch.Tensor,
+        normalize: bool = False,
+    ) -> torch.Tensor:
         ##########################################################
         # Global features are not used in the final model
         # Keep the API here for future study
